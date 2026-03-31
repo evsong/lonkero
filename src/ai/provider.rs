@@ -771,8 +771,8 @@ impl ZhipuProvider {
 
         Ok(Self {
             api_key,
-            model: model.unwrap_or_else(|| "glm-4-plus".to_string()),
-            base_url: base_url.unwrap_or_else(|| "https://open.bigmodel.cn/api/paas/v4".to_string()),
+            model: model.unwrap_or_else(|| "glm-5.1".to_string()),
+            base_url: base_url.unwrap_or_else(|| "https://open.bigmodel.cn/api/coding/paas/v4".to_string()),
             client,
         })
     }
