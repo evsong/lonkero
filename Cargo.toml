@@ -162,6 +162,9 @@ tempfile = "3.25"
 # AI agent: async trait support for LLM providers
 async-trait = "0.1"
 
+[features]
+no_license = []
+
 [profile.release]
 opt-level = 3
 lto = true

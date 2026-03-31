@@ -48,6 +48,12 @@ const INTEGRITY_MARKER: u64 = 0x4C4F4E4B45524F; // "LONKERO" in hex
 
 /// Runtime integrity verification - detects binary tampering
 /// This function's bytecode checksum is verified at multiple points
+#[cfg(feature = "no_license")]
+pub fn verify_binary_integrity() -> bool {
+    true
+}
+
+#[cfg(not(feature = "no_license"))]
 #[inline(never)] // Prevent inlining to maintain addressable code
 pub fn verify_binary_integrity() -> bool {
     // Multi-layer integrity check
@@ -88,6 +94,12 @@ pub fn verify_binary_integrity() -> bool {
 }
 
 /// Verify critical license enforcement functions haven't been patched
+#[cfg(feature = "no_license")]
+pub fn verify_enforcement_integrity() -> bool {
+    true
+}
+
+#[cfg(not(feature = "no_license"))]
 #[inline(never)]
 pub fn verify_enforcement_integrity() -> bool {
     // Check that enforcement functions exist and are callable
@@ -130,6 +142,12 @@ fn generate_token(status: &LicenseStatus) -> u64 {
 }
 
 /// Verify the current validation state - called by distributed checks
+#[cfg(feature = "no_license")]
+pub fn verify_rt_state() -> bool {
+    true
+}
+
+#[cfg(not(feature = "no_license"))]
 #[inline]
 pub fn verify_rt_state() -> bool {
     let token = VALIDATION_TOKEN.load(Ordering::SeqCst);
@@ -139,18 +157,36 @@ pub fn verify_rt_state() -> bool {
 }
 
 /// Get current integrity marker for verification
+#[cfg(feature = "no_license")]
+pub fn get_integrity_marker() -> u64 {
+    0x4C4F4E4B45524F
+}
+
+#[cfg(not(feature = "no_license"))]
 #[inline]
 pub fn get_integrity_marker() -> u64 {
     INTEGRITY_MARKER ^ VALIDATION_TOKEN.load(Ordering::SeqCst)
 }
 
 /// Increment scan counter - must be called for each scan
+#[cfg(feature = "no_license")]
+pub fn increment_scan_counter() -> u64 {
+    0
+}
+
+#[cfg(not(feature = "no_license"))]
 #[inline]
 pub fn increment_scan_counter() -> u64 {
     SCAN_COUNTER.fetch_add(1, Ordering::SeqCst)
 }
 
 /// Get scan counter value
+#[cfg(feature = "no_license")]
+pub fn get_scan_counter() -> u64 {
+    0
+}
+
+#[cfg(not(feature = "no_license"))]
 #[inline]
 pub fn get_scan_counter() -> u64 {
     SCAN_COUNTER.load(Ordering::SeqCst)
@@ -158,6 +194,12 @@ pub fn get_scan_counter() -> u64 {
 
 /// Verify scan is authorized - combines multiple checks
 /// Protected by hardcore anti-tampering system
+#[cfg(feature = "no_license")]
+pub fn verify_scan_authorized() -> bool {
+    true
+}
+
+#[cfg(not(feature = "no_license"))]
 #[inline(never)]
 pub fn verify_scan_authorized() -> bool {
     // DEVELOPMENT MODE: All integrity checks temporarily disabled
@@ -241,6 +283,12 @@ pub fn verify_scan_authorized() -> bool {
 }
 
 /// Get license signature for embedding in results
+#[cfg(feature = "no_license")]
+pub fn get_license_signature() -> String {
+    "no_license".to_string()
+}
+
+#[cfg(not(feature = "no_license"))]
 pub fn get_license_signature() -> String {
     if let Some(license) = get_global_license() {
         let mut hasher = Sha256::new();
@@ -261,6 +309,12 @@ pub fn get_license_signature() -> String {
 }
 
 /// Check if killswitch is active
+#[cfg(feature = "no_license")]
+pub fn is_killswitch_active() -> bool {
+    false
+}
+
+#[cfg(not(feature = "no_license"))]
 #[inline]
 pub fn is_killswitch_active() -> bool {
     KILLSWITCH_ACTIVE.load(Ordering::SeqCst)
@@ -295,6 +349,12 @@ const PREMIUM_FEATURES: &[&str] = &[
 
 /// Check if a premium feature is available for the current license
 /// Protected by multi-layer anti-tampering system
+#[cfg(feature = "no_license")]
+pub fn is_feature_available(_feature: &str) -> bool {
+    true
+}
+
+#[cfg(not(feature = "no_license"))]
 #[inline(never)]
 pub fn is_feature_available(feature: &str) -> bool {
     // DEVELOPMENT MODE: Skip aggressive anti-tamper checks that can cause false positives
@@ -405,6 +465,12 @@ pub fn is_feature_available(feature: &str) -> bool {
 }
 
 /// Check if license allows commercial use
+#[cfg(feature = "no_license")]
+pub fn allows_commercial_use() -> bool {
+    true
+}
+
+#[cfg(not(feature = "no_license"))]
 pub fn allows_commercial_use() -> bool {
     if let Some(license) = get_global_license() {
         match license.license_type {
@@ -429,6 +495,12 @@ pub fn allows_commercial_use() -> bool {
 /// NOTE: This is a LOCAL check only. Server-side authorization via
 /// ScanAuthorization should be used for actual module access control.
 /// This function is for backwards compatibility and offline fallback.
+#[cfg(feature = "no_license")]
+pub fn has_feature(_feature: &str) -> bool {
+    true
+}
+
+#[cfg(not(feature = "no_license"))]
 pub fn has_feature(feature: &str) -> bool {
     // Check global license status
     if let Some(license) = get_global_license() {
@@ -489,6 +561,12 @@ pub fn has_feature(feature: &str) -> bool {
 }
 
 /// Get max allowed targets for current license
+#[cfg(feature = "no_license")]
+pub fn get_max_targets() -> usize {
+    usize::MAX
+}
+
+#[cfg(not(feature = "no_license"))]
 pub fn get_max_targets() -> usize {
     if let Some(license) = get_global_license() {
         license.max_targets.unwrap_or(100) as usize
@@ -1093,6 +1171,27 @@ impl LicenseManager {
 }
 
 /// Verify license before scan - main entry point
+#[cfg(feature = "no_license")]
+pub async fn verify_license_for_scan(
+    _license_key: Option<&str>,
+    _target_count: usize,
+    _is_commercial: bool,
+) -> Result<LicenseStatus> {
+    Ok(LicenseStatus {
+        valid: true,
+        license_type: Some(LicenseType::Enterprise),
+        licensee: Some("no_license".to_string()),
+        organization: None,
+        expires_at: None,
+        features: vec!["all_features".to_string()],
+        max_targets: Some(u32::MAX),
+        killswitch_active: false,
+        killswitch_reason: None,
+        message: None,
+    })
+}
+
+#[cfg(not(feature = "no_license"))]
 pub async fn verify_license_for_scan(
     license_key: Option<&str>,
     _target_count: usize,
@@ -1137,12 +1236,24 @@ pub async fn verify_license_for_scan(
 }
 
 /// Get global license status
+#[cfg(feature = "no_license")]
+pub fn get_global_license() -> Option<&'static LicenseStatus> {
+    None
+}
+
+#[cfg(not(feature = "no_license"))]
 pub fn get_global_license() -> Option<&'static LicenseStatus> {
     GLOBAL_LICENSE.get()
 }
 
 /// Check if license validation is stale and needs refresh
 /// Returns true if more than 24 hours since last validation
+#[cfg(feature = "no_license")]
+pub fn is_validation_stale() -> bool {
+    false
+}
+
+#[cfg(not(feature = "no_license"))]
 pub fn is_validation_stale() -> bool {
     const VALIDATION_TIMEOUT_SECS: u64 = 86400; // 24 hours
     let last = LAST_VALIDATION.load(Ordering::SeqCst);
@@ -1156,6 +1267,12 @@ pub fn is_validation_stale() -> bool {
 }
 
 /// Get time since last validation in hours
+#[cfg(feature = "no_license")]
+pub fn hours_since_validation() -> u64 {
+    0
+}
+
+#[cfg(not(feature = "no_license"))]
 pub fn hours_since_validation() -> u64 {
     let last = LAST_VALIDATION.load(Ordering::SeqCst);
     if last == 0 {
@@ -1167,6 +1284,10 @@ pub fn hours_since_validation() -> u64 {
 }
 
 /// Print license info
+#[cfg(feature = "no_license")]
+pub fn print_license_info(_status: &LicenseStatus) {}
+
+#[cfg(not(feature = "no_license"))]
 pub fn print_license_info(status: &LicenseStatus) {
     if let Some(lt) = status.license_type {
         match lt {

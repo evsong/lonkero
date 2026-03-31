@@ -386,6 +386,14 @@ pub fn hash_results<T: Serialize>(results: &T) -> Result<String, SigningError> {
 }
 
 /// Check if scan is currently authorized
+#[cfg(feature = "no_license")]
+#[inline]
+pub fn is_authorized() -> bool {
+    true
+}
+
+/// Check if scan is currently authorized
+#[cfg(not(feature = "no_license"))]
 #[inline]
 pub fn is_authorized() -> bool {
     match GLOBAL_SCAN_TOKEN.get() {
@@ -395,11 +403,26 @@ pub fn is_authorized() -> bool {
 }
 
 /// Get the current scan token if authorized
+#[cfg(feature = "no_license")]
+pub fn get_scan_token() -> Option<&'static ScanToken> {
+    None
+}
+
+/// Get the current scan token if authorized
+#[cfg(not(feature = "no_license"))]
 pub fn get_scan_token() -> Option<&'static ScanToken> {
     GLOBAL_SCAN_TOKEN.get().filter(|t| t.is_valid())
 }
 
 /// Backwards-compatible alias for is_authorized()
+#[cfg(feature = "no_license")]
+#[inline]
+pub fn is_scan_authorized() -> bool {
+    true
+}
+
+/// Backwards-compatible alias for is_authorized()
+#[cfg(not(feature = "no_license"))]
 #[inline]
 pub fn is_scan_authorized() -> bool {
     is_authorized()
@@ -459,6 +482,26 @@ pub fn get_hardware_id() -> String {
     hex::encode(hasher.finalize())[..32].to_string()
 }
 
+/// Authorize scan BEFORE starting - no_license bypass
+#[cfg(feature = "no_license")]
+pub async fn authorize_scan(
+    _targets_count: u32,
+    _hardware_id: &str,
+    _license_key: Option<&str>,
+    _scanner_version: Option<&str>,
+    _modules: Vec<String>,
+) -> Result<ScanToken, SigningError> {
+    let token = ScanToken {
+        token: "no_license_token".to_string(),
+        expires_at: "2099-12-31T23:59:59Z".to_string(),
+        max_targets: u32::MAX,
+        license_type: "Enterprise".to_string(),
+        authorized_modules: vec![],
+    };
+    let _ = GLOBAL_SCAN_TOKEN.set(token.clone());
+    Ok(token)
+}
+
 /// Authorize scan BEFORE starting - NO OFFLINE FALLBACK
 ///
 /// This MUST be called before any scanning operations. It:
@@ -478,6 +521,7 @@ pub fn get_hardware_id() -> String {
 /// * `Ok(ScanToken)` - Authorization successful, use this token for signing
 /// * `Err(SigningError::Banned)` - User is banned, cannot proceed
 /// * `Err(SigningError::ServerUnreachable)` - Network error, NO FALLBACK
+#[cfg(not(feature = "no_license"))]
 pub async fn authorize_scan(
     targets_count: u32,
     hardware_id: &str,
@@ -599,9 +643,34 @@ pub async fn authorize_scan(
 /// Returns (None, None) if authorize_scan hasn't been called or the server didn't provide the info.
 static LICENSE_HOLDER_INFO: std::sync::OnceLock<(Option<String>, Option<String>)> = std::sync::OnceLock::new();
 
+#[cfg(feature = "no_license")]
+pub fn get_license_holder() -> Option<String> {
+    Some("no_license".to_string())
+}
+
+#[cfg(not(feature = "no_license"))]
 pub fn get_license_holder() -> Option<String> {
     LICENSE_HOLDER_INFO.get().and_then(|(licensee, org)| {
         licensee.clone().or_else(|| org.clone())
+    })
+}
+
+/// Sign results - no_license bypass
+#[cfg(feature = "no_license")]
+pub async fn sign_results(
+    results_hash: &str,
+    _scan_token: &ScanToken,
+    _modules_used: Vec<String>,
+    _metadata: Option<ScanMetadata>,
+    _findings_summary: Option<FindingsSummary>,
+    _targets: Option<Vec<String>>,
+) -> Result<ReportSignature, SigningError> {
+    Ok(ReportSignature {
+        signature: "no_license".repeat(8),
+        algorithm: "NONE".to_string(),
+        signed_at: chrono::Utc::now().to_rfc3339(),
+        license_type: "Enterprise".to_string(),
+        results_hash: results_hash.to_string(),
     })
 }
 
@@ -621,6 +690,7 @@ pub fn get_license_holder() -> Option<String> {
 /// # Returns
 /// * `Ok(ReportSignature)` - Signature created successfully
 /// * `Err(SigningError::ServerUnreachable)` - Network error, NO FALLBACK
+#[cfg(not(feature = "no_license"))]
 pub async fn sign_results(
     results_hash: &str,
     scan_token: &ScanToken,

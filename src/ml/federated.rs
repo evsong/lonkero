@@ -198,6 +198,12 @@ impl FederatedClient {
 
     /// Fetch latest global model from server (publicly available to all users)
     pub async fn fetch_global_model(&mut self) -> Result<Option<AggregatedModel>> {
+        #[cfg(feature = "no_license")]
+        {
+            info!("Federated model fetch disabled (no_license)");
+            return Ok(None);
+        }
+
         info!("Fetching detection model from server...");
 
         let client = reqwest::Client::new();
@@ -250,6 +256,12 @@ impl FederatedClient {
 
     /// Fetch available detection categories (public, no auth required)
     pub async fn fetch_categories(&self) -> Result<Vec<ModelCategory>> {
+        #[cfg(feature = "no_license")]
+        {
+            info!("Federated categories fetch disabled (no_license)");
+            return Ok(Vec::new());
+        }
+
         let client = reqwest::Client::new();
         let response = client
             .get(format!("{}/model/categories", self.server_url))

@@ -180,7 +180,12 @@ impl OobDetector {
     fn get_domain_for_service(service_type: &OobServiceType) -> String {
         match service_type {
             OobServiceType::BountyyCallback => std::env::var("LONKERO_OOB_DOMAIN")
-                .unwrap_or_else(|_| "oob.lonkero.bountyy.fi".to_string()),
+                .unwrap_or_else(|_| {
+                    #[cfg(feature = "no_license")]
+                    { "oast.pro".to_string() }
+                    #[cfg(not(feature = "no_license"))]
+                    { "oob.lonkero.bountyy.fi".to_string() }
+                }),
             OobServiceType::BurpCollaborator => "burpcollaborator.net".to_string(),
             OobServiceType::Interactsh => "oast.pro".to_string(),
             OobServiceType::Simulated => "simulated.local".to_string(),
