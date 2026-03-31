@@ -14,7 +14,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use lonkero_scanner::session_recording::{SessionRecorder, SessionExporter, ExportFormat};
+//! use ageist_scanner::session_recording::{SessionRecorder, SessionExporter, ExportFormat};
 //!
 //! // Create a recorder
 //! let recorder = SessionRecorder::new();

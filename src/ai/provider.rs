@@ -752,6 +752,191 @@ impl LlmProvider for OllamaProvider {
 }
 
 // ---------------------------------------------------------------------------
+// Zhipu GLM provider (OpenAI-compatible)
+// ---------------------------------------------------------------------------
+
+pub struct ZhipuProvider {
+    api_key: String,
+    model: String,
+    base_url: String,
+    client: reqwest::Client,
+}
+
+impl ZhipuProvider {
+    pub fn new(api_key: String, model: Option<String>, base_url: Option<String>) -> Result<Self> {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(120))
+            .build()
+            .context("Failed to create HTTP client for Zhipu API")?;
+
+        Ok(Self {
+            api_key,
+            model: model.unwrap_or_else(|| "glm-4-plus".to_string()),
+            base_url: base_url.unwrap_or_else(|| "https://open.bigmodel.cn/api/paas/v4".to_string()),
+            client,
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl LlmProvider for ZhipuProvider {
+    async fn chat(
+        &self,
+        system: &str,
+        messages: &[Message],
+        tools: &[ToolDefinition],
+    ) -> Result<LlmResponse> {
+        // Build OpenAI-compatible messages
+        let mut oai_messages = Vec::new();
+
+        // System message
+        oai_messages.push(serde_json::json!({
+            "role": "system",
+            "content": system,
+        }));
+
+        // Conversation messages
+        for msg in messages {
+            let role = match msg.role {
+                Role::User => "user",
+                Role::Assistant => "assistant",
+            };
+
+            let text: String = msg
+                .content
+                .iter()
+                .filter_map(|block| match block {
+                    ContentBlock::Text { text } => Some(text.clone()),
+                    ContentBlock::ToolResult { content, .. } => {
+                        Some(format!("[Tool Result]: {}", content))
+                    }
+                    ContentBlock::ToolUse { name, input, .. } => {
+                        Some(format!("[Calling tool: {} with {}]", name, input))
+                    }
+                    ContentBlock::ServerToolUse { name, input, .. } => {
+                        Some(format!("[Server tool: {} with {}]", name, input))
+                    }
+                    ContentBlock::WebSearchToolResult { .. } => {
+                        Some("[Web search results]".to_string())
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            oai_messages.push(serde_json::json!({
+                "role": role,
+                "content": text,
+            }));
+        }
+
+        let mut body = serde_json::json!({
+            "model": self.model,
+            "messages": oai_messages,
+            "stream": false,
+        });
+
+        if !tools.is_empty() {
+            let oai_tools: Vec<serde_json::Value> = tools
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "type": "function",
+                        "function": {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": t.input_schema,
+                        }
+                    })
+                })
+                .collect();
+            body["tools"] = serde_json::Value::Array(oai_tools);
+        }
+
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", self.base_url))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to connect to Zhipu API")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_body = response.text().await.unwrap_or_default();
+            anyhow::bail!("Zhipu API error ({}): {}", status, error_body);
+        }
+
+        let api_response: serde_json::Value = response
+            .json()
+            .await
+            .context("Failed to parse Zhipu API response")?;
+
+        // Parse OpenAI-compatible response
+        let mut blocks = Vec::new();
+
+        if let Some(choices) = api_response["choices"].as_array() {
+            if let Some(choice) = choices.first() {
+                if let Some(message) = choice.get("message") {
+                    if let Some(content) = message["content"].as_str() {
+                        if !content.is_empty() {
+                            blocks.push(ContentBlock::Text {
+                                text: content.to_string(),
+                            });
+                        }
+                    }
+
+                    // Tool calls
+                    if let Some(tool_calls) = message.get("tool_calls").and_then(|tc| tc.as_array()) {
+                        for (i, tc) in tool_calls.iter().enumerate() {
+                            if let Some(function) = tc.get("function") {
+                                let input: serde_json::Value = function["arguments"]
+                                    .as_str()
+                                    .and_then(|s| serde_json::from_str(s).ok())
+                                    .unwrap_or_else(|| function["arguments"].clone());
+                                blocks.push(ContentBlock::ToolUse {
+                                    id: tc["id"].as_str().unwrap_or(&format!("zhipu_tool_{}", i)).to_string(),
+                                    name: function["name"].as_str().unwrap_or("unknown").to_string(),
+                                    input,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let stop_reason = if blocks.iter().any(|b| matches!(b, ContentBlock::ToolUse { .. })) {
+            Some("tool_use".to_string())
+        } else {
+            Some("end_turn".to_string())
+        };
+
+        let usage = api_response.get("usage").map(|u| Usage {
+            input_tokens: u["prompt_tokens"].as_u64().unwrap_or(0),
+            output_tokens: u["completion_tokens"].as_u64().unwrap_or(0),
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+        });
+
+        Ok(LlmResponse {
+            content: blocks,
+            stop_reason,
+            usage,
+        })
+    }
+
+    fn name(&self) -> &str {
+        "zhipu"
+    }
+
+    fn model(&self) -> &str {
+        &self.model
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
@@ -759,6 +944,7 @@ impl LlmProvider for OllamaProvider {
 pub enum ProviderType {
     Claude,
     Ollama,
+    Zhipu,
 }
 
 impl std::str::FromStr for ProviderType {
@@ -768,7 +954,8 @@ impl std::str::FromStr for ProviderType {
         match s.to_lowercase().as_str() {
             "claude" | "anthropic" => Ok(ProviderType::Claude),
             "ollama" | "local" => Ok(ProviderType::Ollama),
-            _ => anyhow::bail!("Unknown provider '{}'. Use 'claude' or 'ollama'.", s),
+            "zhipu" | "glm" | "zhipuai" => Ok(ProviderType::Zhipu),
+            _ => anyhow::bail!("Unknown provider '{}'. Use 'claude', 'ollama', or 'zhipu'.", s),
         }
     }
 }
@@ -790,5 +977,13 @@ pub fn create_provider(
             Ok(Box::new(ClaudeProvider::new(key, model)?))
         }
         ProviderType::Ollama => Ok(Box::new(OllamaProvider::new(model, ollama_url)?)),
+        ProviderType::Zhipu => {
+            let key = api_key
+                .or_else(|| std::env::var("ZHIPU_API_KEY").ok())
+                .context(
+                    "Zhipu API key required. Set ZHIPU_API_KEY env var or use --api-key flag.",
+                )?;
+            Ok(Box::new(ZhipuProvider::new(key, model, ollama_url)?))
+        }
     }
 }

@@ -18,7 +18,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use lonkero_scanner::state_tracker::{StateTracker, StateTrackerConfig};
+//! use ageist_scanner::state_tracker::{StateTracker, StateTrackerConfig};
 //!
 //! let config = StateTrackerConfig::default();
 //! let mut tracker = StateTracker::new(config);

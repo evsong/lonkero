@@ -1,5 +1,5 @@
 [package]
-name = "lonkero"
+name = "ageist-ai"
 version = "3.7.3"
 rust-version = "1.85"
 edition = "2021"
@@ -12,12 +12,12 @@ categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
 
 [lib]
-name = "lonkero_scanner"
+name = "ageist_scanner"
 crate-type = ["rlib"]
 
 # Main CLI binary - standalone security scanner
 [[bin]]
-name = "lonkero"
+name = "ageist"
 path = "src/cli/main.rs"
 
 [dependencies]

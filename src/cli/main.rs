@@ -25,21 +25,21 @@ use tracing::{debug, error, info, warn, Level};
 
 use std::collections::HashSet;
 
-use lonkero_scanner::config::ScannerConfig;
-use lonkero_scanner::crawler::CrawlResults;
-use lonkero_scanner::detection_helpers::detect_technology;
-use lonkero_scanner::http_client::HttpClient;
-use lonkero_scanner::license::{self, LicenseStatus, LicenseType};
-use lonkero_scanner::modules::ids as module_ids;
-use lonkero_scanner::scanners::{
+use ageist_scanner::config::ScannerConfig;
+use ageist_scanner::crawler::CrawlResults;
+use ageist_scanner::detection_helpers::detect_technology;
+use ageist_scanner::http_client::HttpClient;
+use ageist_scanner::license::{self, LicenseStatus, LicenseType};
+use ageist_scanner::modules::ids as module_ids;
+use ageist_scanner::scanners::{
     IntelligentScanOrchestrator, IntelligentScanPlan, PayloadIntensity, ScanEngine, TechCategory,
 };
-use lonkero_scanner::signing::{self, ScanToken, SigningError};
-use lonkero_scanner::types::{ScanConfig, ScanJob, ScanMode, ScanResults};
-use lonkero_scanner::reporting::deduplication::VulnerabilityDeduplicator;
+use ageist_scanner::signing::{self, ScanToken, SigningError};
+use ageist_scanner::types::{ScanConfig, ScanJob, ScanMode, ScanResults};
+use ageist_scanner::reporting::deduplication::VulnerabilityDeduplicator;
 
 // Intelligence system imports
-use lonkero_scanner::analysis::{AttackPlanner, IntelligenceBus, ResponseAnalyzer, StateUpdate};
+use ageist_scanner::analysis::{AttackPlanner, IntelligenceBus, ResponseAnalyzer, StateUpdate};
 
 /// Lonkero - Enterprise Web Security Scanner
 #[derive(Parser)]
@@ -276,7 +276,7 @@ enum Commands {
         #[arg(required = true)]
         target: String,
 
-        /// LLM provider: claude (default), ollama
+        /// LLM provider: claude (default), ollama, zhipu
         #[arg(long, default_value = "claude")]
         provider: String,
 
@@ -457,14 +457,14 @@ enum BrowserAssistAuthType {
     SelfAuthorized,
 }
 
-impl From<BrowserAssistAuthType> for lonkero_scanner::browser_assist::AuthorizationType {
+impl From<BrowserAssistAuthType> for ageist_scanner::browser_assist::AuthorizationType {
     fn from(val: BrowserAssistAuthType) -> Self {
         match val {
-            BrowserAssistAuthType::BugBounty => lonkero_scanner::browser_assist::AuthorizationType::BugBounty,
-            BrowserAssistAuthType::Pentest => lonkero_scanner::browser_assist::AuthorizationType::PentestEngagement,
-            BrowserAssistAuthType::InternalAudit => lonkero_scanner::browser_assist::AuthorizationType::InternalAudit,
-            BrowserAssistAuthType::DevTesting => lonkero_scanner::browser_assist::AuthorizationType::DevTesting,
-            BrowserAssistAuthType::SelfAuthorized => lonkero_scanner::browser_assist::AuthorizationType::SelfAuthorized,
+            BrowserAssistAuthType::BugBounty => ageist_scanner::browser_assist::AuthorizationType::BugBounty,
+            BrowserAssistAuthType::Pentest => ageist_scanner::browser_assist::AuthorizationType::PentestEngagement,
+            BrowserAssistAuthType::InternalAudit => ageist_scanner::browser_assist::AuthorizationType::InternalAudit,
+            BrowserAssistAuthType::DevTesting => ageist_scanner::browser_assist::AuthorizationType::DevTesting,
+            BrowserAssistAuthType::SelfAuthorized => ageist_scanner::browser_assist::AuthorizationType::SelfAuthorized,
         }
     }
 }
@@ -955,7 +955,7 @@ async fn handle_license_command(action: LicenseAction, _current_key: Option<&str
 
 /// Handle ML management commands
 async fn handle_ml_command(action: MlAction) -> Result<()> {
-    use lonkero_scanner::ml::{MlPipeline, PrivacyManager};
+    use ageist_scanner::ml::{MlPipeline, PrivacyManager};
 
     match action {
         MlAction::Enable => {
@@ -1074,7 +1074,7 @@ async fn handle_ml_command(action: MlAction) -> Result<()> {
         }
 
         MlAction::Sync => {
-            use lonkero_scanner::ml::FederatedClient;
+            use ageist_scanner::ml::FederatedClient;
 
             println!();
             println!("========================================================");
@@ -1162,7 +1162,7 @@ async fn handle_ai_command(
     insecure: bool,
     license_key: Option<String>,
 ) -> Result<()> {
-    use lonkero_scanner::ai::{agent, provider};
+    use ageist_scanner::ai::{agent, provider};
 
     // Parse provider type
     let provider_type: provider::ProviderType = provider_name
@@ -1209,8 +1209,8 @@ async fn handle_ai_command(
     // We only need to validate the license key and get the tier — the actual module gating
     // happens per-subprocess when each scan calls authorize_scan with its own modules.
     let (license_type, license_holder) = if license_key.is_some() {
-        let hw_id = lonkero_scanner::signing::get_hardware_id();
-        match lonkero_scanner::signing::authorize_scan(
+        let hw_id = ageist_scanner::signing::get_hardware_id();
+        match ageist_scanner::signing::authorize_scan(
             1,
             &hw_id,
             license_key.as_deref(),
@@ -1227,7 +1227,7 @@ async fn handle_ai_command(
         .await
         {
             Ok(token) => {
-                let holder = lonkero_scanner::signing::get_license_holder();
+                let holder = ageist_scanner::signing::get_license_holder();
                 (Some(token.license_type), holder)
             }
             Err(e) => {
@@ -1290,7 +1290,7 @@ async fn run_scan(
     session_format: SessionRecordingFormat,
     payload_intensity_override: Option<PayloadIntensity>,
     browser_assist: bool,
-    browser_assist_auth_type: lonkero_scanner::browser_assist::AuthorizationType,
+    browser_assist_auth_type: ageist_scanner::browser_assist::AuthorizationType,
     browser_assist_scope: Vec<String>,
     browser_assist_audit_log: Option<PathBuf>,
     license_key: Option<String>,
@@ -1346,7 +1346,7 @@ async fn run_scan(
 
     // Browser-Assist Mode initialization
     // Keep browser launcher alive for the duration of the scan
-    let mut _browser_launcher: Option<lonkero_scanner::browser_assist::BrowserLauncher> = None;
+    let mut _browser_launcher: Option<ageist_scanner::browser_assist::BrowserLauncher> = None;
 
     if browser_assist {
         // License check: Browser-Assist requires any paid license (Personal+)
@@ -1385,7 +1385,7 @@ async fn run_scan(
     }
 
     // Initialize Browser-Assist client if enabled
-    let browser_assist_client: Option<std::sync::Arc<lonkero_scanner::browser_assist::BrowserAssistClient>> = if browser_assist {
+    let browser_assist_client: Option<std::sync::Arc<ageist_scanner::browser_assist::BrowserAssistClient>> = if browser_assist {
         let scope_patterns = if browser_assist_scope.is_empty() {
             targets.iter()
                 .filter_map(|t| url::Url::parse(t).ok())
@@ -1395,14 +1395,14 @@ async fn run_scan(
             browser_assist_scope.clone()
         };
 
-        let scope = lonkero_scanner::browser_assist::ScopeAuthorization::new(
+        let scope = ageist_scanner::browser_assist::ScopeAuthorization::new(
             scope_patterns,
             "lonkero-cli",
             browser_assist_auth_type,
         );
 
-        match lonkero_scanner::browser_assist::BrowserAssistClient::new(
-            lonkero_scanner::browser_assist::DEFAULT_BROWSER_ASSIST_PORT,
+        match ageist_scanner::browser_assist::BrowserAssistClient::new(
+            ageist_scanner::browser_assist::DEFAULT_BROWSER_ASSIST_PORT,
             scope,
             browser_assist_audit_log.clone(),
             license_key.clone(),
@@ -1412,7 +1412,7 @@ async fn run_scan(
 
                 // Try to auto-launch browser with extension
                 info!("[Browser-Assist] Attempting to auto-launch browser with extension...");
-                match lonkero_scanner::browser_assist::BrowserLauncher::new(None) {
+                match ageist_scanner::browser_assist::BrowserLauncher::new(None) {
                     Ok(mut launcher) => {
                         // Open the first target URL in the browser
                         let start_url = targets.first().map(|s| s.as_str());
@@ -1520,7 +1520,7 @@ async fn run_scan(
     }
 
     // Initialize authentication session
-    use lonkero_scanner::auth_context::{AuthSession, Authenticator, LoginCredentials};
+    use ageist_scanner::auth_context::{AuthSession, Authenticator, LoginCredentials};
 
     let auth_session: Option<AuthSession> =
         if let (Some(username), Some(password)) = (&auth_username, &auth_password) {
@@ -1624,7 +1624,7 @@ async fn run_scan(
         let model_path = dirs::home_dir().map(|h| h.join(".lonkero/federated/global_model.json"));
         if model_path.as_ref().map_or(true, |p| !p.exists()) {
             info!("[ML] Downloading detection model for first scan (free for all users)...");
-            if let Ok(mut client) = lonkero_scanner::ml::FederatedClient::new() {
+            if let Ok(mut client) = ageist_scanner::ml::FederatedClient::new() {
                 match client.fetch_and_cache_model().await {
                     Ok(model) => info!(
                         "[ML] Model downloaded: v{} ({} features)",
@@ -1647,7 +1647,7 @@ async fn run_scan(
         );
         info!("");
 
-        use lonkero_scanner::scanners::GoogleDorkingScanner;
+        use ageist_scanner::scanners::GoogleDorkingScanner;
 
         for target in &targets {
             let dork_results = engine.google_dorking_scanner.generate_dorks(target);
@@ -1758,7 +1758,7 @@ async fn run_scan(
             &admin_username,
             &admin_password,
         ) {
-            use lonkero_scanner::multi_role::compare_user_admin;
+            use ageist_scanner::multi_role::compare_user_admin;
 
             info!("");
             info!("=== Multi-Role Authorization Testing ===");
@@ -1804,8 +1804,8 @@ async fn run_scan(
     // ML Model Scoring: enhance findings with model confidence (one-way, no data uploaded)
     if !no_ml {
         if let Some(ref scorer) = engine.model_scorer {
-            let enhancer = lonkero_scanner::ml_enhancer::MlEnhancer::new(
-                lonkero_scanner::scorer::ModelScorer {
+            let enhancer = ageist_scanner::ml_enhancer::MlEnhancer::new(
+                ageist_scanner::scorer::ModelScorer {
                     weights: scorer.weights.clone(),
                     bias: scorer.bias,
                 },
@@ -1860,7 +1860,7 @@ async fn run_scan(
     // ML Auto-Learning: Process scan results for ML training (GDPR-compliant)
     // Features are extracted from vulnerability metadata only - no raw response data stored
     {
-        use lonkero_scanner::ml::{MlPipeline, VulnFeatures};
+        use ageist_scanner::ml::{MlPipeline, VulnFeatures};
         match MlPipeline::new() {
             Ok(mut ml_pipeline) => {
                 if ml_pipeline.is_enabled() {
@@ -2057,7 +2057,7 @@ fn get_dummy_value(field_name: &str) -> String {
 }
 
 /// Get value for a form input, using SELECT options if available
-fn get_form_input_value(input: &lonkero_scanner::crawler::FormInput) -> String {
+fn get_form_input_value(input: &ageist_scanner::crawler::FormInput) -> String {
     // For SELECT elements with options, use first option
     if input.input_type.eq_ignore_ascii_case("select") {
         if let Some(options) = &input.options {
@@ -2080,7 +2080,7 @@ fn get_form_input_value(input: &lonkero_scanner::crawler::FormInput) -> String {
 
 /// Check if a form input should be skipped (auto-generated select, language selector, buttons, etc.)
 /// Returns true if the input should NOT be tested
-fn should_skip_form_input(input: &lonkero_scanner::crawler::FormInput) -> bool {
+fn should_skip_form_input(input: &ageist_scanner::crawler::FormInput) -> bool {
     let name_lower = input.name.to_lowercase();
     let input_type_lower = input.input_type.to_lowercase();
 
@@ -2144,7 +2144,7 @@ fn should_skip_form_input(input: &lonkero_scanner::crawler::FormInput) -> bool {
 
 /// Check if a form looks like a language/locale selector (legacy, checks whole form)
 fn is_language_selector_form(
-    form_inputs: &[lonkero_scanner::crawler::FormInput],
+    form_inputs: &[ageist_scanner::crawler::FormInput],
     action: &str,
 ) -> bool {
     // If all inputs should be skipped, skip the whole form
@@ -2208,8 +2208,8 @@ fn is_language_selector_form(
 async fn browser_assist_get(
     url: &str,
     http_client: &HttpClient,
-    browser_assist: &Option<std::sync::Arc<lonkero_scanner::browser_assist::BrowserAssistClient>>,
-) -> Result<lonkero_scanner::http_client::HttpResponse> {
+    browser_assist: &Option<std::sync::Arc<ageist_scanner::browser_assist::BrowserAssistClient>>,
+) -> Result<ageist_scanner::http_client::HttpResponse> {
     // Try browser-assist first if available and connected
     if let Some(ref client) = browser_assist {
         if client.is_connected() {
@@ -2235,13 +2235,13 @@ async fn execute_standalone_scan(
     job: Arc<ScanJob>,
     config: &ScannerConfig,
     payload_intensity_override: Option<PayloadIntensity>,
-    browser_assist_client: Option<std::sync::Arc<lonkero_scanner::browser_assist::BrowserAssistClient>>,
+    browser_assist_client: Option<std::sync::Arc<ageist_scanner::browser_assist::BrowserAssistClient>>,
 ) -> Result<ScanResults> {
-    use lonkero_scanner::crawler::WebCrawler;
-    use lonkero_scanner::framework_detector::FrameworkDetector;
-    use lonkero_scanner::headless_crawler::{should_use_headless, HeadlessCrawler};
+    use ageist_scanner::crawler::WebCrawler;
+    use ageist_scanner::framework_detector::FrameworkDetector;
+    use ageist_scanner::headless_crawler::{should_use_headless, HeadlessCrawler};
 
-    use lonkero_scanner::types::Vulnerability;
+    use ageist_scanner::types::Vulnerability;
 
     // ============================================================
     // MANDATORY AUTHORIZATION CHECK - CANNOT BE BYPASSED
@@ -2312,7 +2312,7 @@ async fn execute_standalone_scan(
 
     // Web crawling (if enabled) - STORE results for parameter discovery
     let mut discovered_params: Vec<String> = Vec::new();
-    let mut discovered_forms: Vec<(String, Vec<lonkero_scanner::crawler::FormInput>)> = Vec::new(); // (action_url, form_inputs)
+    let mut discovered_forms: Vec<(String, Vec<ageist_scanner::crawler::FormInput>)> = Vec::new(); // (action_url, form_inputs)
     let mut is_spa_detected = false; // SPA detection from crawler
     let mut crawl_results: Option<CrawlResults> = None; // Store for intelligent orchestrator
 
@@ -2335,7 +2335,7 @@ async fn execute_standalone_scan(
 
                 // Extract parameters from discovered forms for XSS testing
                 for form in &results.forms {
-                    let form_inputs: Vec<lonkero_scanner::crawler::FormInput> = form
+                    let form_inputs: Vec<ageist_scanner::crawler::FormInput> = form
                         .inputs
                         .iter()
                         .filter(|input| {
@@ -2384,7 +2384,7 @@ async fn execute_standalone_scan(
 
     // Endpoint discovery using wordlist-based fuzzing
     info!("  - Running endpoint discovery (wordlist fuzzing)");
-    use lonkero_scanner::discovery::EndpointDiscovery;
+    use ageist_scanner::discovery::EndpointDiscovery;
     let endpoint_discovery = EndpointDiscovery::new(Arc::clone(&http_client));
     match endpoint_discovery.discover(target).await {
         Ok(endpoints) => {
@@ -2409,7 +2409,7 @@ async fn execute_standalone_scan(
                         // Mark API endpoints
                         if matches!(
                             endpoint.category,
-                            lonkero_scanner::discovery::EndpointCategory::Api
+                            ageist_scanner::discovery::EndpointCategory::Api
                         ) {
                             results.api_endpoints.insert(endpoint.url.clone());
                         }
@@ -2422,7 +2422,7 @@ async fn execute_standalone_scan(
                         new_results.crawled_urls.insert(endpoint.url.clone());
                         if matches!(
                             endpoint.category,
-                            lonkero_scanner::discovery::EndpointCategory::Api
+                            ageist_scanner::discovery::EndpointCategory::Api
                         ) {
                             new_results.api_endpoints.insert(endpoint.url.clone());
                         }
@@ -2457,9 +2457,9 @@ async fn execute_standalone_scan(
                         // Broadcast to intelligence bus so other scanners can adapt
                         let version = tech.version.as_deref();
                         let confidence = match tech.confidence {
-                            lonkero_scanner::framework_detector::Confidence::High => 0.9,
-                            lonkero_scanner::framework_detector::Confidence::Medium => 0.7,
-                            lonkero_scanner::framework_detector::Confidence::Low => 0.5,
+                            ageist_scanner::framework_detector::Confidence::High => 0.9,
+                            ageist_scanner::framework_detector::Confidence::Medium => 0.7,
+                            ageist_scanner::framework_detector::Confidence::Low => 0.5,
                         };
                         intelligence_bus
                             .report_framework(&tech.name, version, confidence)
@@ -2558,7 +2558,7 @@ async fn execute_standalone_scan(
 
                             // Update discovered forms and params with merged data
                             for form in &results.forms {
-                                let form_inputs: Vec<lonkero_scanner::crawler::FormInput> = form
+                                let form_inputs: Vec<ageist_scanner::crawler::FormInput> = form
                                     .inputs
                                     .iter()
                                     .filter(|input| {
@@ -2748,7 +2748,7 @@ async fn execute_standalone_scan(
 
                     // Add all discovered forms
                     for form in &headless_crawl_results.forms {
-                        let form_inputs: Vec<lonkero_scanner::crawler::FormInput> = form
+                        let form_inputs: Vec<ageist_scanner::crawler::FormInput> = form
                             .inputs
                             .iter()
                             .filter(|input| {
@@ -2877,7 +2877,7 @@ async fn execute_standalone_scan(
                     if !forms.is_empty() {
                         info!("[SUCCESS] Headless browser found {} forms", forms.len());
                         for form in &forms {
-                            let form_inputs: Vec<lonkero_scanner::crawler::FormInput> = form
+                            let form_inputs: Vec<ageist_scanner::crawler::FormInput> = form
                                 .inputs
                                 .iter()
                                 .filter(|input| {
@@ -2962,7 +2962,7 @@ async fn execute_standalone_scan(
         // Only warn if actually vulnerable (not just WAF-protected informational note)
         if vulns
             .iter()
-            .any(|v| v.severity == lonkero_scanner::types::Severity::Critical)
+            .any(|v| v.severity == ageist_scanner::types::Severity::Critical)
         {
             warn!("[CRITICAL] CVE-2025-55182 vulnerability detected!");
         } else if !vulns.is_empty() {
@@ -2979,8 +2979,8 @@ async fn execute_standalone_scan(
             .scan(target, scan_config)
             .await?;
         if vulns.iter().any(|v| {
-            v.severity == lonkero_scanner::types::Severity::Medium
-                || v.severity == lonkero_scanner::types::Severity::High
+            v.severity == ageist_scanner::types::Severity::Medium
+                || v.severity == ageist_scanner::types::Severity::High
         }) {
             warn!("[ALERT] CVE-2025-55183 vulnerability detected!");
         } else if !vulns.is_empty() {
@@ -2997,8 +2997,8 @@ async fn execute_standalone_scan(
             .scan(target, scan_config)
             .await?;
         if vulns.iter().any(|v| {
-            v.severity == lonkero_scanner::types::Severity::High
-                || v.severity == lonkero_scanner::types::Severity::Critical
+            v.severity == ageist_scanner::types::Severity::High
+                || v.severity == ageist_scanner::types::Severity::Critical
         }) {
             warn!("[ALERT] CVE-2025-55184 vulnerability detected!");
         } else if !vulns.is_empty() {
@@ -3035,7 +3035,7 @@ async fn execute_standalone_scan(
         results
     } else {
         // Return empty results when JS mining is skipped
-        lonkero_scanner::scanners::JsMinerResults::new()
+        ageist_scanner::scanners::JsMinerResults::new()
     };
 
     // Log discovered endpoints
@@ -3316,7 +3316,7 @@ async fn execute_standalone_scan(
             // SMART DEDUPLICATION: Group forms by signature to avoid testing identical forms 100+ times
             // Example: Don't test wpDiscuz comment form on every blog post - test once
             use std::collections::HashMap;
-            let mut form_signatures: HashMap<String, (String, Vec<&lonkero_scanner::crawler::FormInput>)> = HashMap::new();
+            let mut form_signatures: HashMap<String, (String, Vec<&ageist_scanner::crawler::FormInput>)> = HashMap::new();
 
             for (action_url, form_inputs) in &discovered_forms {
                 // Create signature: sorted field names + types
@@ -3351,7 +3351,7 @@ async fn execute_standalone_scan(
             }
 
             // Convert back to vec for processing
-            let discovered_forms: Vec<(String, Vec<&lonkero_scanner::crawler::FormInput>)> =
+            let discovered_forms: Vec<(String, Vec<&ageist_scanner::crawler::FormInput>)> =
                 form_signatures.into_values().collect();
 
             // Log all discovered API endpoints for debugging
@@ -3520,8 +3520,8 @@ async fn execute_standalone_scan(
 
         // Build ScanContext for parameter testing
         // This provides context-aware information to scanners for intelligent testing
-        let build_scan_context = |param_name: &str| -> lonkero_scanner::types::ScanContext {
-            use lonkero_scanner::types::{EndpointType, ParameterSource, ScanContext};
+        let build_scan_context = |param_name: &str| -> ageist_scanner::types::ScanContext {
+            use ageist_scanner::types::{EndpointType, ParameterSource, ScanContext};
 
             // Determine parameter source
             let parameter_source = if discovered_params.contains(&param_name.to_string()) {
@@ -3807,7 +3807,7 @@ async fn execute_standalone_scan(
         if !is_graphql_only && !is_static_site && (!has_only_filter || scan_config.should_run_module("second_order_injection")) {
             info!("  - Testing Second-Order Injection (stored XSS/SQLi/CMDi)");
             // Create a new scanner instance for this scan (needs &mut self for state tracking)
-            let mut second_order_scanner = lonkero_scanner::scanners::SecondOrderInjectionScanner::new(Arc::clone(&engine.http_client));
+            let mut second_order_scanner = ageist_scanner::scanners::SecondOrderInjectionScanner::new(Arc::clone(&engine.http_client));
             match second_order_scanner.scan(target, &scan_config).await {
                 Ok((vulns, tests)) => {
                     // Deduplicate against existing findings
@@ -5053,16 +5053,16 @@ async fn execute_standalone_scan(
     // Update attack planner with discovered vulnerabilities and analyze chains
     // ==========================================================================
     {
-        use lonkero_scanner::analysis::{AttackSeverity, KnownVulnerability};
+        use ageist_scanner::analysis::{AttackSeverity, KnownVulnerability};
 
         // Feed discovered vulnerabilities into attack planner
         for vuln in &all_vulnerabilities {
             let severity = match vuln.severity {
-                lonkero_scanner::types::Severity::Critical => AttackSeverity::Critical,
-                lonkero_scanner::types::Severity::High => AttackSeverity::High,
-                lonkero_scanner::types::Severity::Medium => AttackSeverity::Medium,
-                lonkero_scanner::types::Severity::Low => AttackSeverity::Low,
-                lonkero_scanner::types::Severity::Info => AttackSeverity::Low,
+                ageist_scanner::types::Severity::Critical => AttackSeverity::Critical,
+                ageist_scanner::types::Severity::High => AttackSeverity::High,
+                ageist_scanner::types::Severity::Medium => AttackSeverity::Medium,
+                ageist_scanner::types::Severity::Low => AttackSeverity::Low,
+                ageist_scanner::types::Severity::Info => AttackSeverity::Low,
             };
 
             let known_vuln = KnownVulnerability {
@@ -5235,7 +5235,7 @@ fn print_banner() {
 }
 
 fn print_vulnerability_summary(results: &ScanResults) {
-    use lonkero_scanner::types::Severity;
+    use ageist_scanner::types::Severity;
 
     let critical = results
         .vulnerabilities
@@ -5726,27 +5726,27 @@ fn generate_html_report(results: &[ScanResults]) -> Result<String> {
         let critical = result
             .vulnerabilities
             .iter()
-            .filter(|v| v.severity == lonkero_scanner::types::Severity::Critical)
+            .filter(|v| v.severity == ageist_scanner::types::Severity::Critical)
             .count();
         let high = result
             .vulnerabilities
             .iter()
-            .filter(|v| v.severity == lonkero_scanner::types::Severity::High)
+            .filter(|v| v.severity == ageist_scanner::types::Severity::High)
             .count();
         let medium = result
             .vulnerabilities
             .iter()
-            .filter(|v| v.severity == lonkero_scanner::types::Severity::Medium)
+            .filter(|v| v.severity == ageist_scanner::types::Severity::Medium)
             .count();
         let low = result
             .vulnerabilities
             .iter()
-            .filter(|v| v.severity == lonkero_scanner::types::Severity::Low)
+            .filter(|v| v.severity == ageist_scanner::types::Severity::Low)
             .count();
         let info = result
             .vulnerabilities
             .iter()
-            .filter(|v| v.severity == lonkero_scanner::types::Severity::Info)
+            .filter(|v| v.severity == ageist_scanner::types::Severity::Info)
             .count();
 
         html.push_str(&format!(r#"
@@ -5788,18 +5788,18 @@ fn generate_html_report(results: &[ScanResults]) -> Result<String> {
 
         for vuln in &result.vulnerabilities {
             let severity_class = match vuln.severity {
-                lonkero_scanner::types::Severity::Critical => "vuln-critical",
-                lonkero_scanner::types::Severity::High => "vuln-high",
-                lonkero_scanner::types::Severity::Medium => "vuln-medium",
-                lonkero_scanner::types::Severity::Low => "vuln-low",
-                lonkero_scanner::types::Severity::Info => "vuln-info",
+                ageist_scanner::types::Severity::Critical => "vuln-critical",
+                ageist_scanner::types::Severity::High => "vuln-high",
+                ageist_scanner::types::Severity::Medium => "vuln-medium",
+                ageist_scanner::types::Severity::Low => "vuln-low",
+                ageist_scanner::types::Severity::Info => "vuln-info",
             };
             let severity_label = match vuln.severity {
-                lonkero_scanner::types::Severity::Critical => "Critical",
-                lonkero_scanner::types::Severity::High => "High",
-                lonkero_scanner::types::Severity::Medium => "Medium",
-                lonkero_scanner::types::Severity::Low => "Low",
-                lonkero_scanner::types::Severity::Info => "Info",
+                ageist_scanner::types::Severity::Critical => "Critical",
+                ageist_scanner::types::Severity::High => "High",
+                ageist_scanner::types::Severity::Medium => "Medium",
+                ageist_scanner::types::Severity::Low => "Low",
+                ageist_scanner::types::Severity::Info => "Info",
             };
 
             // Build PoC/Payload section if payload exists
@@ -5970,8 +5970,8 @@ fn generate_sarif_report(results: &[ScanResults]) -> Result<String> {
                     serde_json::json!({
                         "ruleId": v.cwe.clone(),
                         "level": match v.severity {
-                            lonkero_scanner::types::Severity::Critical | lonkero_scanner::types::Severity::High => "error",
-                            lonkero_scanner::types::Severity::Medium => "warning",
+                            ageist_scanner::types::Severity::Critical | ageist_scanner::types::Severity::High => "error",
+                            ageist_scanner::types::Severity::Medium => "warning",
                             _ => "note"
                         },
                         "message": {
@@ -6017,8 +6017,8 @@ fn generate_csv_report(results: &[ScanResults]) -> Result<String> {
 }
 
 fn generate_pdf_report(results: &[ScanResults]) -> Result<Vec<u8>> {
-    use lonkero_scanner::reporting::formats::pdf::PdfReportGenerator;
-    use lonkero_scanner::reporting::types::{
+    use ageist_scanner::reporting::formats::pdf::PdfReportGenerator;
+    use ageist_scanner::reporting::types::{
         BrandingConfig, ComplianceMapping, EnhancedReport, ExecutiveSummary, RiskAssessment,
         VulnerabilityBreakdown,
     };
@@ -6040,23 +6040,23 @@ fn generate_pdf_report(results: &[ScanResults]) -> Result<Vec<u8>> {
     // Count severities
     let critical_count = all_vulns
         .iter()
-        .filter(|v| matches!(v.severity, lonkero_scanner::types::Severity::Critical))
+        .filter(|v| matches!(v.severity, ageist_scanner::types::Severity::Critical))
         .count();
     let high_count = all_vulns
         .iter()
-        .filter(|v| matches!(v.severity, lonkero_scanner::types::Severity::High))
+        .filter(|v| matches!(v.severity, ageist_scanner::types::Severity::High))
         .count();
     let medium_count = all_vulns
         .iter()
-        .filter(|v| matches!(v.severity, lonkero_scanner::types::Severity::Medium))
+        .filter(|v| matches!(v.severity, ageist_scanner::types::Severity::Medium))
         .count();
     let low_count = all_vulns
         .iter()
-        .filter(|v| matches!(v.severity, lonkero_scanner::types::Severity::Low))
+        .filter(|v| matches!(v.severity, ageist_scanner::types::Severity::Low))
         .count();
     let info_count = all_vulns
         .iter()
-        .filter(|v| matches!(v.severity, lonkero_scanner::types::Severity::Info))
+        .filter(|v| matches!(v.severity, ageist_scanner::types::Severity::Info))
         .count();
 
     let risk_score = (critical_count as f64 * 10.0
@@ -6076,7 +6076,7 @@ fn generate_pdf_report(results: &[ScanResults]) -> Result<Vec<u8>> {
         "Info"
     };
 
-    let scan_results = lonkero_scanner::types::ScanResults {
+    let scan_results = ageist_scanner::types::ScanResults {
         scan_id: scan_id.clone(),
         target: target.clone(),
         tests_run: results.iter().map(|r| r.tests_run).sum(),

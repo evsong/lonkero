@@ -1024,7 +1024,7 @@ impl Drop for BrowserLauncher {
 ///
 /// # Example
 /// ```ignore
-/// use lonkero_scanner::browser_assist::launch_browser_and_wait;
+/// use ageist_scanner::browser_assist::launch_browser_and_wait;
 ///
 /// let launcher = launch_browser_and_wait(9339, None, 30).await?;
 /// // Browser is now running with extension connected
