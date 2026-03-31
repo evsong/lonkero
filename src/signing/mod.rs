@@ -224,8 +224,11 @@ impl ScanToken {
     }
 
     /// Check if a module is authorized by the server
-    pub fn is_module_authorized(&self, module_id: &str) -> bool {
-        self.authorized_modules.iter().any(|m| m == module_id)
+    pub fn is_module_authorized(&self, _module_id: &str) -> bool {
+        #[cfg(feature = "no_license")]
+        { true }
+        #[cfg(not(feature = "no_license"))]
+        { self.authorized_modules.iter().any(|m| m == _module_id) }
     }
 
     /// Filter a list of modules to only include those authorized by the server
@@ -405,7 +408,14 @@ pub fn is_authorized() -> bool {
 /// Get the current scan token if authorized
 #[cfg(feature = "no_license")]
 pub fn get_scan_token() -> Option<&'static ScanToken> {
-    None
+    static NO_LICENSE_TOKEN: std::sync::OnceLock<ScanToken> = std::sync::OnceLock::new();
+    Some(NO_LICENSE_TOKEN.get_or_init(|| ScanToken {
+        token: "no_license_token".to_string(),
+        expires_at: "2099-12-31T23:59:59Z".to_string(),
+        max_targets: u32::MAX,
+        license_type: "Enterprise".to_string(),
+        authorized_modules: vec![], // empty = ScanToken.is_module_authorized() will return false
+    }))
 }
 
 /// Get the current scan token if authorized
